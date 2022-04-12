@@ -4,7 +4,6 @@ import (
 	"encoding/json"
 	"fmt"
 	_ "github.com/ethereum/go-ethereum/common/hexutil"
-	"github.com/joho/godotenv"
 	"github.com/nikola43/web3manager/web3manager"
 	"io/ioutil"
 	"log"
@@ -36,22 +35,29 @@ func main() {
 		cde686c74df7db569dc5978b38ec5f051ad93a9f9729c4717993fec9a75fe335
 	*/
 
-	rawurl := "https://data-seed-prebsc-2-s3.binance.org:8545"
+	rawurl := "https://speedy-nodes-nyc.moralis.io/84a2745d907034e6d388f8d6/bsc/testnet"
+	rawurlWs := "wss://speedy-nodes-nyc.moralis.io/84a2745d907034e6d388f8d6/bsc/testnet/ws"
 	px := "cde686c74df7db569dc5978b38ec5f051ad93a9f9729c4717993fec9a75fe335"
 
-	var goWeb3Manager *web3manager.GoWeb3Manager = web3manager.NewHttpWeb3Client(
+	var goWeb3WsManager *web3manager.GoWeb3Manager = web3manager.NewWsWeb3Client(
+		rawurlWs,
+		px)
+
+	var goWeb3HttpManager *web3manager.GoWeb3Manager = web3manager.NewHttpWeb3Client(
 		rawurl,
 		px)
 
-	fmt.Println(goWeb3Manager.ChainId())
+	fmt.Println(goWeb3HttpManager.ChainId())
 
 	wallets := make([]web3manager.Wallet, 0)
 
-	// load .env file
-	err := godotenv.Load(".env")
-	if err != nil {
-		log.Fatalf("Error loading .env file")
-	}
+	/*
+		// load .env file
+		err := godotenv.Load(".env")
+		if err != nil {
+			log.Fatalf("Error loading .env file")
+		}
+	*/
 
 	wPath := "./wallets"
 	files, err := ioutil.ReadDir(wPath)
@@ -74,6 +80,16 @@ func main() {
 		json.Unmarshal(byteValue, &wallet)
 		fmt.Println(wallet)
 		wallets = append(wallets, wallet)
+	}
+
+	contractAddress1 := "0x9Ac64Cc6e4415144C455BD8E4837Fea55603e5c3"
+	out := make(chan string)
+	var addresses []string
+	addresses = append(addresses, contractAddress1)
+
+	err2 := goWeb3WsManager.ListenBridgesEventsV2(addresses, out)
+	if err2 != nil {
+		log.Fatal(err)
 	}
 
 	/*
