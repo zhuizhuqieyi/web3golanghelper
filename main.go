@@ -6,7 +6,7 @@ import (
 	"math/big"
 	"time"
 
-	_ "github.com/nikola43/go-ethereum/common/hexutil"
+	_ "github.com/go-ethereum/go-ethereum/common/hexutil"
 	"github.com/nikola43/web3manager/web3manager"
 )
 
