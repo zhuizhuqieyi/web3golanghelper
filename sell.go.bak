@@ -2,10 +2,10 @@ package main
 
 import (
 	"fmt"
-	"github.com/ethereum/go-ethereum/accounts/abi/bind"
-	"github.com/ethereum/go-ethereum/common"
-	_ "github.com/ethereum/go-ethereum/common/hexutil"
-	"github.com/ethereum/go-ethereum/ethclient"
+	"github.com/nikola43/go-ethereum/accounts/abi/bind"
+	"github.com/nikola43/go-ethereum/common"
+	_ "github.com/nikola43/go-ethereum/common/hexutil"
+	"github.com/nikola43/go-ethereum/ethclient"
 	"github.com/hrharder/go-gas"
 	"github.com/joho/godotenv"
 	"github.com/nikola43/web3manager/contracts/IERC20"

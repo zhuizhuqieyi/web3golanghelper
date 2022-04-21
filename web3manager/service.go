@@ -5,20 +5,21 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
-	"github.com/ethereum/go-ethereum"
-	"github.com/ethereum/go-ethereum/common"
-	"github.com/ethereum/go-ethereum/core/types"
-	"github.com/ethereum/go-ethereum/crypto"
-	"github.com/ethereum/go-ethereum/ethclient"
-	"github.com/fatih/color"
-	"github.com/hokaccha/go-prettyjson"
-	web3util "github.com/nikola43/web3manager/web3manager/util"
-	"golang.org/x/crypto/sha3"
 	"log"
 	"math/big"
 	"net/url"
 	"strconv"
 	"time"
+
+	"github.com/fatih/color"
+	"github.com/hokaccha/go-prettyjson"
+	"github.com/nikola43/go-ethereum"
+	"github.com/nikola43/go-ethereum/common"
+	"github.com/nikola43/go-ethereum/core/types"
+	"github.com/nikola43/go-ethereum/crypto"
+	"github.com/nikola43/go-ethereum/ethclient"
+	web3util "github.com/nikola43/web3manager/web3manager/util"
+	"golang.org/x/crypto/sha3"
 	//web3utils "github.com/nikola43/goweb3manager/goweb3manager/util"
 )
 
@@ -67,21 +68,6 @@ func (w *GoWeb3Manager) AddWsClient(wsClient *ethclient.Client) error {
 	return nil
 }
 
-func (w *GoWeb3Manager) GenerateContractEventSubscription(contractAddress string) (chan types.Log, ethereum.Subscription, error) {
-
-	logs := make(chan types.Log)
-	query := ethereum.FilterQuery{
-		Addresses: []common.Address{common.HexToAddress(contractAddress)},
-	}
-
-	sub, err := w.wsClient.SubscribeFilterLogs(context.Background(), query, logs)
-	if err != nil {
-		return nil, nil, err
-	}
-
-	return logs, sub, nil
-}
-
 func (w *GoWeb3Manager) SuggestGasPrice() *big.Int {
 
 	gasPrice, err := w.selectClient().SuggestGasPrice(context.Background())
@@ -94,48 +80,28 @@ func (w *GoWeb3Manager) SuggestGasPrice() *big.Int {
 	return gasPrice
 }
 
-func (w *GoWeb3Manager) ListenBridgesEventsV2(contractsAddresses []string, out chan<- string) error {
+func NewGoWeb3Manager(rpcUrl, wsUrl string, plainPrivateKey string) *GoWeb3Manager {
 
-	var logs []chan types.Log
-	var subs []ethereum.Subscription
+	goWeb3WsManager := NewWsWeb3Client(
+		wsUrl,
+		plainPrivateKey)
 
-	fmt.Println("")
-	fmt.Println(color.YellowString("  --------------------- Contracts Subscriptions ---------------------"))
-	for i := 0; i < len(contractsAddresses); i++ {
+	goWeb3HttpManager := NewHttpWeb3Client(
+		rpcUrl,
+		plainPrivateKey)
 
-		contractLog, contractSub, err := w.GenerateContractEventSubscription(contractsAddresses[i])
-		if err != nil {
-			return err
-		}
-
-		logs = append(logs, contractLog)
-		subs = append(subs, contractSub)
-
-		go func(i int) {
-			fmt.Println(color.MagentaString("    Init Subscription: "), color.YellowString(contractsAddresses[i]))
-
-			for {
-				select {
-				case err := <-subs[i].Err():
-					out <- err.Error()
-
-				case vLog := <-logs[i]:
-					//fmt.Println(vLog) // pointer to event log
-					fmt.Println("Data logs")
-					fmt.Println(string(vLog.Data))
-					//fmt.Println("vLog.Address: " + vLog.Address.Hex())
-					fmt.Println("vLog.TxHash: " + vLog.TxHash.Hex())
-					fmt.Println("vLog.BlockNumber: " + strconv.FormatUint(vLog.BlockNumber, 10))
-					fmt.Println("")
-					out <- vLog.TxHash.Hex()
-				}
-			}
-		}(i)
+	goWeb3Manager := &GoWeb3Manager{
+		plainPrivateKey: plainPrivateKey,
+		httpClient:      goWeb3HttpManager,
+		wsClient:        goWeb3WsManager,
+		fromAddress:     web3util.GeneratePublicAddressFromPrivateKey(plainPrivateKey),
 	}
-	return nil
+
+	return goWeb3Manager
+
 }
 
-func NewHttpWeb3Client(rpcUrl string, plainPrivateKey interface{}) *GoWeb3Manager {
+func NewHttpWeb3Client(rpcUrl string, plainPrivateKey interface{}) *ethclient.Client {
 
 	client, err := ethclient.Dial(rpcUrl)
 	if err != nil {
@@ -147,16 +113,7 @@ func NewHttpWeb3Client(rpcUrl string, plainPrivateKey interface{}) *GoWeb3Manage
 		log.Fatal(getBlockErr)
 	}
 
-	goWeb3Manager := &GoWeb3Manager{
-		httpClient: client,
-	}
-
-	if plainPrivateKey != nil {
-		goWeb3Manager.plainPrivateKey = plainPrivateKey.(string)
-		//goWeb3Manager.fromAddress = web3utils.GeneratePublicAddressFromPrivateKey(goWeb3Manager.plainPrivateKey)
-	}
-
-	return goWeb3Manager
+	return client
 }
 
 func (w *GoWeb3Manager) CurrentBlockNumber() uint64 {
@@ -183,33 +140,24 @@ func (w *GoWeb3Manager) SetPrivateKey(plainPrivateKey string) *GoWeb3Manager {
 	return w
 }
 
-func NewWsWeb3Client(rpcUrl string, plainPrivateKey interface{}) *GoWeb3Manager {
+func NewWsWeb3Client(rpcUrl string, plainPrivateKey interface{}) *ethclient.Client {
 
 	_, err := url.ParseRequestURI(rpcUrl)
 	if err != nil {
 		log.Fatal(err)
 	}
 
-	wsClient, err2 := ethclient.Dial(rpcUrl)
-	if err2 != nil {
-		log.Fatal(err)
+	wsClient, wsClientErr := ethclient.Dial(rpcUrl)
+	if wsClientErr != nil {
+		log.Fatal(wsClientErr)
 	}
 
 	_, getBlockErr := wsClient.BlockNumber(context.Background())
 	if getBlockErr != nil {
-		log.Fatal(err)
+		log.Fatal(getBlockErr)
 	}
 
-	goWeb3Manager := &GoWeb3Manager{
-		wsClient: wsClient,
-	}
-
-	if plainPrivateKey != nil {
-		goWeb3Manager.plainPrivateKey = plainPrivateKey.(string)
-		goWeb3Manager.fromAddress = web3util.GeneratePublicAddressFromPrivateKey(goWeb3Manager.plainPrivateKey)
-	}
-
-	return goWeb3Manager
+	return wsClient
 }
 
 func (w *GoWeb3Manager) Unsubscribe() {
@@ -346,6 +294,11 @@ func (w *GoWeb3Manager) SubscribeContractBridgeBSCEvent(contractAddressString st
 			//fmt.Println(vLog) // pointer to event log
 		}
 	}
+}
+
+func (w *GoWeb3Manager) EstimateTxResult(to string, txData []byte) bool {
+	estimatedGas := w.EstimateGas(to, txData)
+	return estimatedGas > 0
 }
 
 func (w *GoWeb3Manager) EstimateGas(to string, txData []byte) uint64 {
@@ -506,6 +459,62 @@ func (w *GoWeb3Manager) CancelTx(to string, nonce uint64, multiplier int64) (str
 	}
 
 	return txId, nil
+}
+
+func (w *GoWeb3Manager) GenerateContractEventSubscription(contractAddress string) (chan types.Log, ethereum.Subscription, error) {
+
+	logs := make(chan types.Log)
+	query := ethereum.FilterQuery{
+		Addresses: []common.Address{common.HexToAddress(contractAddress)},
+	}
+
+	sub, err := w.wsClient.SubscribeFilterLogs(context.Background(), query, logs)
+	if err != nil {
+		return nil, nil, err
+	}
+
+	return logs, sub, nil
+}
+
+func (w *GoWeb3Manager) ListenBridgesEventsV2(contractsAddresses []string, out chan<- string) error {
+
+	var logs []chan types.Log
+	var subs []ethereum.Subscription
+
+	fmt.Println("")
+	fmt.Println(color.YellowString("  --------------------- Contracts Subscriptions ---------------------"))
+	for i := 0; i < len(contractsAddresses); i++ {
+
+		contractLog, contractSub, err := w.GenerateContractEventSubscription(contractsAddresses[i])
+		if err != nil {
+			return err
+		}
+
+		logs = append(logs, contractLog)
+		subs = append(subs, contractSub)
+
+		go func(i int) {
+			fmt.Println(color.MagentaString("    Init Subscription: "), color.YellowString(contractsAddresses[i]))
+
+			for {
+				select {
+				case err := <-subs[i].Err():
+					out <- err.Error()
+
+				case vLog := <-logs[i]:
+					//fmt.Println(vLog) // pointer to event log
+					fmt.Println("Data logs")
+					fmt.Println(string(vLog.Data))
+					//fmt.Println("vLog.Address: " + vLog.Address.Hex())
+					fmt.Println("vLog.TxHash: " + vLog.TxHash.Hex())
+					fmt.Println("vLog.BlockNumber: " + strconv.FormatUint(vLog.BlockNumber, 10))
+					fmt.Println("")
+					out <- vLog.TxHash.Hex()
+				}
+			}
+		}(i)
+	}
+	return nil
 }
 
 /*

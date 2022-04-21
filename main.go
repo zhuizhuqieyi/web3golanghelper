@@ -1,15 +1,13 @@
 package main
 
 import (
-	"encoding/json"
 	"fmt"
-	_ "github.com/ethereum/go-ethereum/common/hexutil"
-	"github.com/nikola43/web3manager/web3manager"
-	"io/ioutil"
 	"log"
 	"math/big"
-	"os"
 	"time"
+
+	_ "github.com/nikola43/go-ethereum/common/hexutil"
+	"github.com/nikola43/web3manager/web3manager"
 )
 
 /*
@@ -35,52 +33,52 @@ func main() {
 		cde686c74df7db569dc5978b38ec5f051ad93a9f9729c4717993fec9a75fe335
 	*/
 
-	rawurl := "https://speedy-nodes-nyc.moralis.io/84a2745d907034e6d388f8d6/bsc/testnet"
-	rawurlWs := "wss://speedy-nodes-nyc.moralis.io/84a2745d907034e6d388f8d6/bsc/testnet/ws"
+	rpcUrl := "https://speedy-nodes-nyc.moralis.io/84a2745d907034e6d388f8d6/bsc/testnet"
+	wsRpcUrl := "wss://speedy-nodes-nyc.moralis.io/84a2745d907034e6d388f8d6/bsc/testnet/ws"
 	px := "cde686c74df7db569dc5978b38ec5f051ad93a9f9729c4717993fec9a75fe335"
 
-	var goWeb3WsManager *web3manager.GoWeb3Manager = web3manager.NewWsWeb3Client(
-		rawurlWs,
+	var goWeb3WsManager *web3manager.GoWeb3Manager = web3manager.NewGoWeb3Manager(
+		rpcUrl,
+		wsRpcUrl,
 		px)
 
-	var goWeb3HttpManager *web3manager.GoWeb3Manager = web3manager.NewHttpWeb3Client(
-		rawurl,
-		px)
-
-	fmt.Println(goWeb3HttpManager.ChainId())
-
-	wallets := make([]web3manager.Wallet, 0)
+	fmt.Println(goWeb3WsManager.ChainId())
 
 	/*
-		// load .env file
-		err := godotenv.Load(".env")
+		wallets := make([]web3manager.Wallet, 0)
+
+
+
+			// load .env file
+			err := godotenv.Load(".env")
+			if err != nil {
+				log.Fatalf("Error loading .env file")
+			}
+
+
+		wPath := "./wallets"
+		files, err := ioutil.ReadDir(wPath)
 		if err != nil {
-			log.Fatalf("Error loading .env file")
+			log.Fatal(err)
+		}
+
+		for _, file := range files {
+			fileName := file.Name()
+			fmt.Println("fileName", fileName)
+
+			wallet := web3manager.Wallet{
+				PublicKey:  "",
+				PrivateKey: "",
+			}
+
+			// Open our jsonFile
+			jsonFile, _ := os.Open(wPath + "/" + fileName)
+			byteValue, _ := ioutil.ReadAll(jsonFile)
+			json.Unmarshal(byteValue, &wallet)
+			fmt.Println(wallet)
+			wallets = append(wallets, wallet)
 		}
 	*/
-
-	wPath := "./wallets"
-	files, err := ioutil.ReadDir(wPath)
-	if err != nil {
-		log.Fatal(err)
-	}
-
-	for _, file := range files {
-		fileName := file.Name()
-		fmt.Println("fileName", fileName)
-
-		wallet := web3manager.Wallet{
-			PublicKey:  "",
-			PrivateKey: "",
-		}
-
-		// Open our jsonFile
-		jsonFile, _ := os.Open(wPath + "/" + fileName)
-		byteValue, _ := ioutil.ReadAll(jsonFile)
-		json.Unmarshal(byteValue, &wallet)
-		fmt.Println(wallet)
-		wallets = append(wallets, wallet)
-	}
 
 	contractAddress1 := "0x9Ac64Cc6e4415144C455BD8E4837Fea55603e5c3"
 	out := make(chan string)
@@ -89,7 +87,7 @@ func main() {
 
 	err2 := goWeb3WsManager.ListenBridgesEventsV2(addresses, out)
 	if err2 != nil {
-		log.Fatal(err)
+		log.Fatal(err2)
 	}
 
 	/*
