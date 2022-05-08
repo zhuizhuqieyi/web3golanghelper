@@ -12,13 +12,13 @@ import (
 	"strconv"
 	"strings"
 
-	"github.com/nikola43/go-ethereum/core/types"
-	"github.com/nikola43/go-ethereum/ethclient"
+	"github.com/ethereum/go-ethereum/core/types"
+	"github.com/ethereum/go-ethereum/ethclient"
 
-	"github.com/nikola43/go-ethereum/common"
-	"github.com/nikola43/go-ethereum/common/hexutil"
-	"github.com/nikola43/go-ethereum/crypto"
-	"github.com/nikola43/go-ethereum/params"
+	"github.com/ethereum/go-ethereum/common"
+	"github.com/ethereum/go-ethereum/common/hexutil"
+	"github.com/ethereum/go-ethereum/crypto"
+	"github.com/ethereum/go-ethereum/params"
 	"github.com/shopspring/decimal"
 )
 

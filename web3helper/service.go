@@ -1,4 +1,4 @@
-package web3manager
+package web3helper
 
 import (
 	"context"
@@ -10,15 +10,14 @@ import (
 	"net/url"
 	"strconv"
 	"time"
-
-	"github.com/fatih/color"
 	"github.com/hokaccha/go-prettyjson"
-	"github.com/nikola43/go-ethereum"
-	"github.com/nikola43/go-ethereum/common"
-	"github.com/nikola43/go-ethereum/core/types"
-	"github.com/nikola43/go-ethereum/crypto"
-	"github.com/nikola43/go-ethereum/ethclient"
-	web3util "github.com/nikola43/web3manager/web3manager/util"
+	"github.com/ethereum/go-ethereum"
+	"github.com/ethereum/go-ethereum/common"
+	"github.com/ethereum/go-ethereum/core/types"
+	"github.com/ethereum/go-ethereum/crypto"
+	"github.com/ethereum/go-ethereum/ethclient"
+	"github.com/fatih/color"
+	web3util "github.com/nikola43/web3golanghelper/web3helper/util"
 	"golang.org/x/crypto/sha3"
 	//web3utils "github.com/nikola43/goweb3manager/goweb3manager/util"
 )
@@ -41,14 +40,14 @@ type Wallet struct {
 	PrivateKey string `json:"PrivateKey"`
 }
 
-type GoWeb3Manager struct {
+type Web3GolangHelper struct {
 	plainPrivateKey string
 	httpClient      *ethclient.Client
 	wsClient        *ethclient.Client
 	fromAddress     *common.Address
 }
 
-func (w *GoWeb3Manager) AddHttpClient(httpClient *ethclient.Client) error {
+func (w *Web3GolangHelper) AddHttpClient(httpClient *ethclient.Client) error {
 
 	if w.httpClient != nil {
 		return errors.New("web3 Http provider already instanced")
@@ -58,7 +57,7 @@ func (w *GoWeb3Manager) AddHttpClient(httpClient *ethclient.Client) error {
 	return nil
 }
 
-func (w *GoWeb3Manager) AddWsClient(wsClient *ethclient.Client) error {
+func (w *Web3GolangHelper) AddWsClient(wsClient *ethclient.Client) error {
 
 	if w.wsClient != nil {
 		return errors.New("web3 websocket provider already instanced")
@@ -68,7 +67,7 @@ func (w *GoWeb3Manager) AddWsClient(wsClient *ethclient.Client) error {
 	return nil
 }
 
-func (w *GoWeb3Manager) SuggestGasPrice() *big.Int {
+func (w *Web3GolangHelper) SuggestGasPrice() *big.Int {
 
 	gasPrice, err := w.selectClient().SuggestGasPrice(context.Background())
 
@@ -80,17 +79,18 @@ func (w *GoWeb3Manager) SuggestGasPrice() *big.Int {
 	return gasPrice
 }
 
-func NewGoWeb3Manager(rpcUrl, wsUrl string, plainPrivateKey string) *GoWeb3Manager {
+func NewWeb3GolangHelper(rpcUrl, wsUrl string, plainPrivateKey string) *Web3GolangHelper {
 
 	goWeb3WsManager := NewWsWeb3Client(
 		wsUrl,
 		plainPrivateKey)
 
+		
 	goWeb3HttpManager := NewHttpWeb3Client(
-		rpcUrl,
-		plainPrivateKey)
+		rpcUrl)
+		
 
-	goWeb3Manager := &GoWeb3Manager{
+	goWeb3Manager := &Web3GolangHelper{
 		plainPrivateKey: plainPrivateKey,
 		httpClient:      goWeb3HttpManager,
 		wsClient:        goWeb3WsManager,
@@ -101,7 +101,7 @@ func NewGoWeb3Manager(rpcUrl, wsUrl string, plainPrivateKey string) *GoWeb3Manag
 
 }
 
-func NewHttpWeb3Client(rpcUrl string, plainPrivateKey interface{}) *ethclient.Client {
+func NewHttpWeb3Client(rpcUrl string) *ethclient.Client {
 
 	client, err := ethclient.Dial(rpcUrl)
 	if err != nil {
@@ -116,7 +116,7 @@ func NewHttpWeb3Client(rpcUrl string, plainPrivateKey interface{}) *ethclient.Cl
 	return client
 }
 
-func (w *GoWeb3Manager) CurrentBlockNumber() uint64 {
+func (w *Web3GolangHelper) CurrentBlockNumber() uint64 {
 
 	blockNumber, getBlockErr := w.selectClient().BlockNumber(context.Background())
 	if getBlockErr != nil {
@@ -127,15 +127,15 @@ func (w *GoWeb3Manager) CurrentBlockNumber() uint64 {
 	return blockNumber
 }
 
-func (w *GoWeb3Manager) HttpClient() *ethclient.Client {
+func (w *Web3GolangHelper) HttpClient() *ethclient.Client {
 	return w.httpClient
 }
 
-func (w *GoWeb3Manager) WebSocketClient() *ethclient.Client {
+func (w *Web3GolangHelper) WebSocketClient() *ethclient.Client {
 	return w.wsClient
 }
 
-func (w *GoWeb3Manager) SetPrivateKey(plainPrivateKey string) *GoWeb3Manager {
+func (w *Web3GolangHelper) SetPrivateKey(plainPrivateKey string) *Web3GolangHelper {
 	w.plainPrivateKey = plainPrivateKey
 	return w
 }
@@ -160,13 +160,13 @@ func NewWsWeb3Client(rpcUrl string, plainPrivateKey interface{}) *ethclient.Clie
 	return wsClient
 }
 
-func (w *GoWeb3Manager) Unsubscribe() {
+func (w *Web3GolangHelper) Unsubscribe() {
 	time.Sleep(10 * time.Second)
 	fmt.Println("---unsubscribe-----")
 	//w.ethSubscription.Unsubscribe()
 }
 
-func (w *GoWeb3Manager) GetEthBalance(address string) *big.Int {
+func (w *Web3GolangHelper) GetEthBalance(address string) *big.Int {
 	account := common.HexToAddress(address)
 	balance, err := w.httpClient.BalanceAt(context.Background(), account, nil)
 	if err != nil {
@@ -175,7 +175,7 @@ func (w *GoWeb3Manager) GetEthBalance(address string) *big.Int {
 	return balance
 }
 
-func (w *GoWeb3Manager) IsAddressContract(address string) bool {
+func (w *Web3GolangHelper) IsAddressContract(address string) bool {
 
 	if !web3util.ValidateAddress(address) {
 		return false
@@ -188,7 +188,7 @@ func (w *GoWeb3Manager) IsAddressContract(address string) bool {
 	return len(bytecode) > 0
 }
 
-func (w *GoWeb3Manager) ChainId() *big.Int {
+func (w *Web3GolangHelper) ChainId() *big.Int {
 	chainID, err := w.httpClient.NetworkID(context.Background())
 	if err != nil {
 		log.Fatal(err)
@@ -196,7 +196,7 @@ func (w *GoWeb3Manager) ChainId() *big.Int {
 	return chainID
 }
 
-func (w *GoWeb3Manager) PendingNonce() uint64 {
+func (w *Web3GolangHelper) PendingNonce() uint64 {
 
 	nonce, err := w.selectClient().PendingNonceAt(context.Background(), *w.fromAddress)
 	if err != nil {
@@ -205,7 +205,7 @@ func (w *GoWeb3Manager) PendingNonce() uint64 {
 
 	return nonce
 }
-func (w *GoWeb3Manager) SignTx(tx *types.Transaction) (*types.Transaction, error) {
+func (w *Web3GolangHelper) SignTx(tx *types.Transaction) (*types.Transaction, error) {
 
 	privateKey, privateKeyErr := crypto.HexToECDSA(w.plainPrivateKey)
 	if privateKeyErr != nil {
@@ -220,7 +220,7 @@ func (w *GoWeb3Manager) SignTx(tx *types.Transaction) (*types.Transaction, error
 	return signedTx, nil
 }
 
-func (w *GoWeb3Manager) NewContract(contractAddress string) {
+func (w *Web3GolangHelper) NewContract(contractAddress string) {
 
 	/*
 		address := common.HexToAddress(contractAddress)
@@ -234,7 +234,7 @@ func (w *GoWeb3Manager) NewContract(contractAddress string) {
 	*/
 }
 
-func (w *GoWeb3Manager) SubscribeContractBridgeBSCEvent(contractAddressString string) error {
+func (w *Web3GolangHelper) SubscribeContractBridgeBSCEvent(contractAddressString string) error {
 
 	if w.wsClient == nil {
 		return errors.New("Nil Web3 Websocket Client")
@@ -296,12 +296,12 @@ func (w *GoWeb3Manager) SubscribeContractBridgeBSCEvent(contractAddressString st
 	}
 }
 
-func (w *GoWeb3Manager) EstimateTxResult(to string, txData []byte) bool {
+func (w *Web3GolangHelper) EstimateTxResult(to string, txData []byte) bool {
 	estimatedGas := w.EstimateGas(to, txData)
 	return estimatedGas > 0
 }
 
-func (w *GoWeb3Manager) EstimateGas(to string, txData []byte) uint64 {
+func (w *Web3GolangHelper) EstimateGas(to string, txData []byte) uint64 {
 	toAddress := common.HexToAddress(to)
 	estimateGas, estimateGasErr := w.selectClient().EstimateGas(context.Background(), ethereum.CallMsg{
 		To:   &toAddress,
@@ -313,7 +313,7 @@ func (w *GoWeb3Manager) EstimateGas(to string, txData []byte) uint64 {
 	return estimateGas
 }
 
-func (w *GoWeb3Manager) SendTokens(tokenAddressString, toAddressString string, value *big.Int) (string, uint64, error) {
+func (w *Web3GolangHelper) SendTokens(tokenAddressString, toAddressString string, value *big.Int) (string, uint64, error) {
 
 	toAddress := common.HexToAddress(toAddressString)
 
@@ -335,7 +335,7 @@ func (w *GoWeb3Manager) SendTokens(tokenAddressString, toAddressString string, v
 	return txId, txNonce, nil
 }
 
-func (w *GoWeb3Manager) selectClient() *ethclient.Client {
+func (w *Web3GolangHelper) selectClient() *ethclient.Client {
 	var selectedClient *ethclient.Client
 	if w.wsClient != nil {
 		selectedClient = w.wsClient
@@ -349,7 +349,7 @@ func (w *GoWeb3Manager) selectClient() *ethclient.Client {
 	return selectedClient
 }
 
-func (w *GoWeb3Manager) SendEth(toAddressString string, value string) (string, uint64, error) {
+func (w *Web3GolangHelper) SendEth(toAddressString string, value string) (string, uint64, error) {
 
 	txId, nonce, err := w.SignAndSendTransaction(toAddressString, web3util.ToWei(value, 18), make([]byte, 0), w.PendingNonce(), nil, nil)
 	if err != nil {
@@ -359,7 +359,7 @@ func (w *GoWeb3Manager) SendEth(toAddressString string, value string) (string, u
 	return txId, nonce, nil
 }
 
-func (w *GoWeb3Manager) SignAndSendTransaction(toAddressString string, value *big.Int, data []byte, nonce uint64, customGasPrice interface{}, customGasLimit interface{}) (string, uint64, error) {
+func (w *Web3GolangHelper) SignAndSendTransaction(toAddressString string, value *big.Int, data []byte, nonce uint64, customGasPrice interface{}, customGasLimit interface{}) (string, uint64, error) {
 
 	usedGasPrice, _ := w.selectClient().SuggestGasPrice(context.Background())
 	if logLevel == MediumLogLevel {
@@ -442,7 +442,7 @@ func (w *GoWeb3Manager) SignAndSendTransaction(toAddressString string, value *bi
 	return singedTx.Hash().Hex(), nonce, nil
 }
 
-func (w *GoWeb3Manager) CancelTx(to string, nonce uint64, multiplier int64) (string, error) {
+func (w *Web3GolangHelper) CancelTx(to string, nonce uint64, multiplier int64) (string, error) {
 
 	gasPrice, _ := w.selectClient().SuggestGasPrice(context.Background())
 
@@ -461,7 +461,7 @@ func (w *GoWeb3Manager) CancelTx(to string, nonce uint64, multiplier int64) (str
 	return txId, nil
 }
 
-func (w *GoWeb3Manager) GenerateContractEventSubscription(contractAddress string) (chan types.Log, ethereum.Subscription, error) {
+func (w *Web3GolangHelper) GenerateContractEventSubscription(contractAddress string) (chan types.Log, ethereum.Subscription, error) {
 
 	logs := make(chan types.Log)
 	query := ethereum.FilterQuery{
@@ -476,7 +476,7 @@ func (w *GoWeb3Manager) GenerateContractEventSubscription(contractAddress string
 	return logs, sub, nil
 }
 
-func (w *GoWeb3Manager) ListenBridgesEventsV2(contractsAddresses []string, out chan<- string) error {
+func (w *Web3GolangHelper) ListenBridgesEventsV2(contractsAddresses []string, out chan<- []chan types.Log) error {
 
 	var logs []chan types.Log
 	var subs []ethereum.Subscription
@@ -499,7 +499,8 @@ func (w *GoWeb3Manager) ListenBridgesEventsV2(contractsAddresses []string, out c
 			for {
 				select {
 				case err := <-subs[i].Err():
-					out <- err.Error()
+					fmt.Println(err)
+					out <- logs
 
 				case vLog := <-logs[i]:
 					//fmt.Println(vLog) // pointer to event log
@@ -509,7 +510,8 @@ func (w *GoWeb3Manager) ListenBridgesEventsV2(contractsAddresses []string, out c
 					fmt.Println("vLog.TxHash: " + vLog.TxHash.Hex())
 					fmt.Println("vLog.BlockNumber: " + strconv.FormatUint(vLog.BlockNumber, 10))
 					fmt.Println("")
-					out <- vLog.TxHash.Hex()
+					//out <- vLog.TxHash.Hex()
+					out <- logs
 				}
 			}
 		}(i)
@@ -518,7 +520,7 @@ func (w *GoWeb3Manager) ListenBridgesEventsV2(contractsAddresses []string, out c
 }
 
 /*
-func (w *GoWeb3Manager) SendEth(to string, val float64) {
+func (w *Web3GolangHelper) SendEth(to string, val float64) {
 	fromAddress := crypto.PubkeyToAddress(*w.PublicKeyECDSA)
 	toAddress := common.HexToAddress(to)
 	var data []byte
@@ -554,7 +556,7 @@ func (w *GoWeb3Manager) SendEth(to string, val float64) {
 	fmt.Printf("tx sent: %s", signedTx.Hash().Hex())
 }
 */
-func (w *GoWeb3Manager) SwitchAccount(plainPrivateKey string) {
+func (w *Web3GolangHelper) SwitchAccount(plainPrivateKey string) {
 	// create privateKey from string key
 	//privateKey, privateKeyErr := crypto.HexToECDSA(plainPrivateKey)
 	//errorsutil.HandleError(privateKeyErr)
@@ -573,7 +575,7 @@ func (w *GoWeb3Manager) SwitchAccount(plainPrivateKey string) {
 	//w.Address = address
 }
 
-func (w *GoWeb3Manager) ConfigureTransactor(value *big.Int, gasPrice *big.Int, gasLimit uint64) {
+func (w *Web3GolangHelper) ConfigureTransactor(value *big.Int, gasPrice *big.Int, gasLimit uint64) {
 
 	/*
 		if value.String() != "-1" {
@@ -588,7 +590,7 @@ func (w *GoWeb3Manager) ConfigureTransactor(value *big.Int, gasPrice *big.Int, g
 }
 
 /*
-func (w *GoWeb3Manager) Balance() *big.Int {
+func (w *Web3GolangHelper) Balance() *big.Int {
 
 	// get current balance
 	balance, balanceErr := w.Client.BalanceAt(context.Background(), w.Address, nil)
@@ -599,7 +601,7 @@ func (w *GoWeb3Manager) Balance() *big.Int {
 
 */
 /*
-func (w *GoWeb3Manager) PendingNonce() *big.Int {
+func (w *Web3GolangHelper) PendingNonce() *big.Int {
 	// calculate next nonce
 	nonce, nonceErr := w.Client.PendingNonceAt(context.Background(), w.Address)
 	errorsutil.HandleError(nonceErr)
