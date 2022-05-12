@@ -840,7 +840,7 @@ func (w *Web3GolangHelper) getTokenPairs(token *models.EventsCatched) string {
 }
 */
 
-func (w *Web3GolangHelper)  getReserves(tokenAddress string) Reserve {
+func (w *Web3GolangHelper)  GetReserves(tokenAddress string) Reserve {
 
 	pairInstance, instanceErr := pancakePair.NewPancake(common.HexToAddress("0xB7926C0430Afb07AA7DEfDE6DA862aE0Bde767bc"), w.HttpClient())
 	if instanceErr != nil {
@@ -855,7 +855,7 @@ func (w *Web3GolangHelper)  getReserves(tokenAddress string) Reserve {
 	return reserves
 }
 
-func (w *Web3GolangHelper) getPair(tokenAddress string) string {
+func (w *Web3GolangHelper) GetPair(tokenAddress string) string {
 
 	factoryInstance, instanceErr := pancakeFactory.NewPancake(common.HexToAddress("0xB7926C0430Afb07AA7DEfDE6DA862aE0Bde767bc"), w.HttpClient())
 	if instanceErr != nil {
