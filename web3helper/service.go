@@ -52,7 +52,7 @@ type Web3GolangHelper struct {
 	plainPrivateKey string
 	httpClient      *ethclient.Client
 	wsClient        *ethclient.Client
-	fromAddress     *common.Address
+	FromAddress     *common.Address
 }
 
 func (w *Web3GolangHelper) AddHttpClient(httpClient *ethclient.Client) error {
@@ -102,7 +102,7 @@ func NewWeb3GolangHelper(rpcUrl, wsUrl string, plainPrivateKey string) *Web3Gola
 		plainPrivateKey: plainPrivateKey,
 		httpClient:      goWeb3HttpManager,
 		wsClient:        goWeb3WsManager,
-		fromAddress:     GeneratePublicAddressFromPrivateKey(plainPrivateKey),
+		FromAddress:     GeneratePublicAddressFromPrivateKey(plainPrivateKey),
 	}
 
 	return goWeb3Manager
@@ -205,7 +205,7 @@ func (w *Web3GolangHelper) ChainId() *big.Int {
 }
 
 func (w *Web3GolangHelper) PendingNonce() *big.Int {
-	nonce, err := w.selectClient().PendingNonceAt(context.Background(), *w.fromAddress)
+	nonce, err := w.selectClient().PendingNonceAt(context.Background(), *w.FromAddress)
 	if err != nil {
 		log.Fatal(err)
 	}
@@ -543,7 +543,7 @@ func (w *Web3GolangHelper) SwitchAccount(plainPrivateKey string) {
 
 	// generate address from public key
 	address := crypto.PubkeyToAddress(*publicKeyECDSA)
-	w.fromAddress = &address
+	w.FromAddress = &address
 }
 
 func (w *Web3GolangHelper) ConfigureTransactor(value *big.Int, gasPrice *big.Int, gasLimit uint64) {
