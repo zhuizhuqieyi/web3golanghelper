@@ -12,6 +12,7 @@ require (
 require (
 	github.com/stretchr/testify v1.7.1 // indirect
 	github.com/yusufpapurcu/wmi v1.2.2 // indirect
+	rsc.io/qr v0.2.0 // indirect
 )
 
 require (
@@ -26,8 +27,10 @@ require (
 	github.com/hrharder/go-gas v1.0.1
 	github.com/mattn/go-colorable v0.1.12 // indirect
 	github.com/mattn/go-isatty v0.0.14 // indirect
+	github.com/mdp/qrterminal v1.0.1
 	github.com/rjeczalik/notify v0.9.2 // indirect
 	github.com/shirou/gopsutil v3.21.11+incompatible // indirect
+	github.com/skip2/go-qrcode v0.0.0-20200617195104-da1b6568686e
 	github.com/tklauser/go-sysconf v0.3.10 // indirect
 	github.com/tklauser/numcpus v0.4.0 // indirect
 	golang.org/x/sys v0.0.0-20220503163025-988cb79eb6c6 // indirect

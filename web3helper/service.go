@@ -8,9 +8,12 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"image/color"
+	"io/ioutil"
 	"log"
 	"math/big"
 	"net/url"
+	"os"
 	"reflect"
 	"regexp"
 	"strconv"
@@ -25,17 +28,19 @@ import (
 	"github.com/ethereum/go-ethereum/crypto"
 	"github.com/ethereum/go-ethereum/ethclient"
 	"github.com/ethereum/go-ethereum/params"
-	"github.com/fatih/color"
+	ccolor "github.com/fatih/color"
 	"github.com/hokaccha/go-prettyjson"
 	"github.com/hrharder/go-gas"
+	"github.com/mdp/qrterminal"
 	"github.com/nikola43/web3golanghelper/genericutils"
 	"github.com/shopspring/decimal"
+	qrcode "github.com/skip2/go-qrcode"
 	"golang.org/x/crypto/sha3"
 
 	//web3utils "github.com/nikola43/goweb3manager/goweb3manager/util"
-	pancakeRouter "github.com/nikola43/web3golanghelper/contracts/IPancakeRouter02"
-	pancakePair "github.com/nikola43/web3golanghelper/contracts/IPancakePair"
 	pancakeFactory "github.com/nikola43/web3golanghelper/contracts/IPancakeFactory"
+	pancakePair "github.com/nikola43/web3golanghelper/contracts/IPancakePair"
+	pancakeRouter "github.com/nikola43/web3golanghelper/contracts/IPancakeRouter02"
 )
 
 type Reserve struct {
@@ -396,33 +401,33 @@ func (w *Web3GolangHelper) SignAndSendTransaction(toAddressString string, value 
 
 	usedGasPrice, _ := w.selectClient().SuggestGasPrice(context.Background())
 	if logLevel == MediumLogLevel {
-		fmt.Println(color.CyanString("usedGasPrice -> suggestGasPrice: "), color.YellowString(strconv.Itoa(int(usedGasPrice.Int64())))+"\n")
+		fmt.Println(ccolor.CyanString("usedGasPrice -> suggestGasPrice: "), ccolor.YellowString(strconv.Itoa(int(usedGasPrice.Int64())))+"\n")
 	}
 
 	if customGasPrice != nil {
 		usedGasPrice = customGasPrice.(*big.Int)
 
 		if logLevel == MediumLogLevel {
-			fmt.Println(color.CyanString("usedGasPrice -> customGasPrice: "), color.YellowString(strconv.Itoa(int(usedGasPrice.Int64())))+"\n")
+			fmt.Println(ccolor.CyanString("usedGasPrice -> customGasPrice: "), ccolor.YellowString(strconv.Itoa(int(usedGasPrice.Int64())))+"\n")
 		}
 	}
 
 	usedGasLimit := defaultGasLimit
 	if logLevel == MediumLogLevel {
-		fmt.Println(color.CyanString("usedGasLimit -> defaultGasLimit: "), color.YellowString(strconv.Itoa(int(usedGasLimit)))+"\n")
+		fmt.Println(ccolor.CyanString("usedGasLimit -> defaultGasLimit: "), ccolor.YellowString(strconv.Itoa(int(usedGasLimit)))+"\n")
 	}
 
 	if customGasLimit != nil {
 		usedGasLimit = customGasLimit.(uint64)
 
 		if logLevel == MediumLogLevel {
-			fmt.Println(color.CyanString("usedGasLimit -> customGasLimit: "), color.YellowString(strconv.Itoa(int(usedGasLimit)))+"\n")
+			fmt.Println(ccolor.CyanString("usedGasLimit -> customGasLimit: "), ccolor.YellowString(strconv.Itoa(int(usedGasLimit)))+"\n")
 		}
 	} else {
 		if len(data) > 0 {
 			usedGasLimit = w.EstimateGas(toAddressString, data)
 			if logLevel == MediumLogLevel {
-				fmt.Println(color.CyanString("usedGasLimit -> w.EstimateGas: "), color.YellowString(strconv.Itoa(int(usedGasLimit)))+"\n")
+				fmt.Println(ccolor.CyanString("usedGasLimit -> w.EstimateGas: "), ccolor.YellowString(strconv.Itoa(int(usedGasLimit)))+"\n")
 			}
 		} else {
 
@@ -464,9 +469,9 @@ func (w *Web3GolangHelper) SignAndSendTransaction(toAddressString string, value 
 
 		timestamp := time.Now().Unix()
 
-		fmt.Println(color.GreenString("Raw Transaction Hash: "), color.YellowString(tx.Hash().Hex()))
-		fmt.Println(color.CyanString("Transaction Hash: "), color.YellowString(singedTx.Hash().Hex()))
-		fmt.Println(color.MagentaString("Timestamp: "), color.YellowString(strconv.Itoa(int(timestamp))))
+		fmt.Println(ccolor.GreenString("Raw Transaction Hash: "), ccolor.YellowString(tx.Hash().Hex()))
+		fmt.Println(ccolor.CyanString("Transaction Hash: "), ccolor.YellowString(singedTx.Hash().Hex()))
+		fmt.Println(ccolor.MagentaString("Timestamp: "), ccolor.YellowString(strconv.Itoa(int(timestamp))))
 		fmt.Println(string(s))
 
 		//OpenBrowser("https://testnet.snowtrace.io/tx/" + singedTx.Hash().Hex())
@@ -635,7 +640,7 @@ func (w *Web3GolangHelper) ListenBridgesEventsV2(contractsAddresses []string, ou
 	var subs []ethereum.Subscription
 
 	fmt.Println("")
-	fmt.Println(color.YellowString("  --------------------- Contracts Subscriptions ---------------------"))
+	fmt.Println(ccolor.YellowString("  --------------------- Contracts Subscriptions ---------------------"))
 	for i := 0; i < len(contractsAddresses); i++ {
 
 		contractLog, contractSub, err := w.GenerateContractEventSubscription(contractsAddresses[i])
@@ -647,7 +652,7 @@ func (w *Web3GolangHelper) ListenBridgesEventsV2(contractsAddresses []string, ou
 		subs = append(subs, contractSub)
 
 		go func(i int) {
-			fmt.Println(color.MagentaString("    Init Subscription: "), color.YellowString(contractsAddresses[i]))
+			fmt.Println(ccolor.MagentaString("    Init Subscription: "), ccolor.YellowString(contractsAddresses[i]))
 
 			for {
 				select {
@@ -1035,4 +1040,91 @@ func GenerateAddressFromPlainPrivateKey(pk string) (common.Address, *ecdsa.Priva
 	}
 
 	return crypto.PubkeyToAddress(*publicKeyECDSA), privateKey, nil
+}
+
+
+func getWallets() {
+	wallets := make([]Wallet, 0)
+
+	wPath := "./wallets"
+	files, err := ioutil.ReadDir(wPath)
+	if err != nil {
+		log.Fatal(err)
+	}
+
+	for _, file := range files {
+		fileName := file.Name()
+		fmt.Println("fileName", fileName)
+
+		wallet := Wallet{
+			PublicKey:  "",
+			PrivateKey: "",
+		}
+
+		// Open our jsonFile
+		jsonFile, _ := os.Open(wPath + "/" + fileName)
+		byteValue, _ := ioutil.ReadAll(jsonFile)
+		json.Unmarshal(byteValue, &wallet)
+		fmt.Println(wallet)
+		wallets = append(wallets, wallet)
+	}
+
+	fmt.Println(wallets)
+}
+
+
+func qrr() {
+
+	config := qrterminal.Config{
+		Level:     qrterminal.M,
+		Writer:    os.Stdout,
+		BlackChar: qrterminal.WHITE,
+		WhiteChar: qrterminal.BLACK,
+		QuietZone: 1,
+	}
+	qrterminal.GenerateWithConfig("https://github.com/mdp/qrterminal", config)
+
+	
+		err := qrcode.WriteColorFile("singana", qrcode.Medium, 256, color.Black, color.White, "secondfile.png")
+		if err != nil {
+			fmt.Printf("Sorry couldn't create qrcode:,%v", err)
+
+		}
+	
+}
+
+
+func GenerateWallet() {
+
+	privateKey, err := crypto.GenerateKey()
+	if err != nil {
+		log.Fatal(err)
+	}
+
+	privateKeyBytes := crypto.FromECDSA(privateKey)
+	fmt.Println(hexutil.Encode(privateKeyBytes)[2:]) // fad9c8855b740a0b7ed4c221dbad0f33a83a49cad6b3fe8d5817ac83d38b6a19
+
+	publicKey := privateKey.Public()
+	publicKeyECDSA, ok := publicKey.(*ecdsa.PublicKey)
+	if !ok {
+		log.Fatal("cannot assert type: publicKey is not of type *ecdsa.PublicKey")
+	}
+
+	publicKeyBytes := crypto.FromECDSAPub(publicKeyECDSA)
+	fmt.Println(hexutil.Encode(publicKeyBytes)[4:]) // 9a7df67f79246283fdc93af76d4f8cdd62c4886e8cd870944e817dd0b97934fdd7719d0810951e03418205868a5c1b40b192451367f28e0088dd75e15de40c05
+
+	address := crypto.PubkeyToAddress(*publicKeyECDSA).Hex()
+	fmt.Println(address) // 0x96216849c49358B10257cb55b28eA603c874b05E
+
+	hash := sha3.NewLegacyKeccak256()
+	hash.Write(publicKeyBytes[1:])
+	fmt.Println(hexutil.Encode(hash.Sum(nil)[12:])) // 0x96216849c49358b10257cb55b28ea603c874b05e
+
+	wallet := Wallet{
+		PublicKey:  address,
+		PrivateKey: hexutil.Encode(privateKeyBytes)[2:],
+	}
+
+	file, _ := json.MarshalIndent(wallet, "", " ")
+	_ = ioutil.WriteFile("wallets/"+address+".json", file, 0644)
 }
