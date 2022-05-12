@@ -39,7 +39,6 @@ const (
 	HighLogLevel   LogLevel = 3
 )
 
-var chainId = big.NewInt(43113)
 var defaultGasLimit = uint64(7000000)
 var logLevel = HighLogLevel
 
@@ -219,7 +218,7 @@ func (w *Web3GolangHelper) SignTx(tx *types.Transaction) (*types.Transaction, er
 		return nil, privateKeyErr
 	}
 
-	signedTx, signTxErr := types.SignTx(tx, types.NewEIP155Signer(chainId), privateKey)
+	signedTx, signTxErr := types.SignTx(tx, types.NewEIP155Signer(w.ChainId()), privateKey)
 	if signTxErr != nil {
 		return nil, signTxErr
 	}
