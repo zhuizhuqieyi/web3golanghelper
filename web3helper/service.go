@@ -1,8 +1,10 @@
 package web3helper
 
 import (
+	"bytes"
 	"context"
 	"crypto/ecdsa"
+	"encoding/gob"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -25,10 +27,22 @@ import (
 	"github.com/ethereum/go-ethereum/params"
 	"github.com/fatih/color"
 	"github.com/hokaccha/go-prettyjson"
+	"github.com/hrharder/go-gas"
+	"github.com/nikola43/web3golanghelper/genericutils"
 	"github.com/shopspring/decimal"
 	"golang.org/x/crypto/sha3"
+
 	//web3utils "github.com/nikola43/goweb3manager/goweb3manager/util"
+	pancakeRouter "github.com/nikola43/web3golanghelper/contracts/IPancakeRouter02"
+	pancakePair "github.com/nikola43/web3golanghelper/contracts/IPancakePair"
+	pancakeFactory "github.com/nikola43/web3golanghelper/contracts/IPancakeFactory"
 )
+
+type Reserve struct {
+	Reserve0           *big.Int
+	Reserve1           *big.Int
+	BlockTimestampLast uint32
+}
 
 type LogLevel int
 
@@ -319,6 +333,19 @@ func (w *Web3GolangHelper) EstimateGas(to string, txData []byte) uint64 {
 	return estimateGas
 }
 
+func (w *Web3GolangHelper) BuildContractEventSubscription(contractAddress string, logs chan types.Log) ethereum.Subscription {
+
+	query := ethereum.FilterQuery{
+		Addresses: []common.Address{common.HexToAddress(contractAddress)},
+	}
+
+	sub, err := w.WebSocketClient().SubscribeFilterLogs(context.Background(), query, logs)
+	if err != nil {
+		fmt.Println(sub)
+	}
+	return sub
+}
+
 func (w *Web3GolangHelper) SendTokens(tokenAddressString, toAddressString string, value *big.Int) (string, *big.Int, error) {
 
 	toAddress := common.HexToAddress(toAddressString)
@@ -480,6 +507,126 @@ func (w *Web3GolangHelper) GenerateContractEventSubscription(contractAddress str
 	}
 
 	return logs, sub, nil
+}
+
+
+func (w *Web3GolangHelper) Buy(tokenAddress string) {
+	// contract addresses
+	pancakeContractAddress := common.HexToAddress("0x9Ac64Cc6e4415144C455BD8E4837Fea55603e5c3") // pancake router address
+	wBnbContractAddress := "0xae13d989daC2f0dEbFf460aC112a837C89BAa7cd"                         // wbnb token adddress
+	tokenContractAddress := common.HexToAddress(tokenAddress)                                   // eth token adddress
+
+	
+	// create pancakeRouter pancakeRouterInstance
+	pancakeRouterInstance, instanceErr := pancakeRouter.NewPancake(pancakeContractAddress, w.HttpClient())
+	if instanceErr != nil {
+		fmt.Println(instanceErr)
+	}
+	fmt.Println("pancakeRouterInstance contract is loaded")
+
+	// calculate gas and gas limit
+	gasLimit := uint64(2100000) // in units
+	gasPrice, gasPriceErr := gas.SuggestGasPrice(gas.GasPriorityAverage)
+	if gasPriceErr != nil {
+		fmt.Println(gasPriceErr)
+	}
+
+	fmt.Println(
+
+		wBnbContractAddress,
+		tokenContractAddress,
+		pancakeRouterInstance,
+		gasLimit,
+		gasPrice,
+	)
+
+	// calculate fee and final value
+	gasFee := CalcGasCost(gasLimit, gasPrice)
+	ethValue := EtherToWei(big.NewFloat(0.1))
+	finalValue := big.NewInt(0).Sub(ethValue, gasFee)
+
+	// set transaction data
+	transactor := w.BuildTransactor(finalValue, gasPrice, gasLimit)
+	amountOutMin := big.NewInt(1.0)
+	deadline := big.NewInt(time.Now().Unix() + 10000)
+	path := GeneratePath(wBnbContractAddress, tokenContractAddress.Hex())
+
+	swapTx, SwapExactETHForTokensErr := pancakeRouterInstance.SwapExactETHForTokensSupportingFeeOnTransferTokens(
+		transactor,
+		amountOutMin,
+		path,
+		*w.FromAddress,
+		deadline)
+	if SwapExactETHForTokensErr != nil {
+		fmt.Println("SwapExactETHForTokensErr")
+		fmt.Println(SwapExactETHForTokensErr)
+	}
+
+	fmt.Println(swapTx)
+
+	txHash := swapTx.Hash().Hex()
+	fmt.Println(txHash)
+	genericutils.OpenBrowser("https://testnet.bscscan.com/tx/" + txHash)
+}
+
+/*
+   function swapExactETHForTokensSupportingFeeOnTransferTokens(
+       uint amountOutMin,
+       address[] calldata path,
+       address to,
+       uint deadline
+   ) external payable;
+*/
+
+func (w *Web3GolangHelper)  BuyV2(tokenAddress string, value *big.Int) {
+	toAddress := common.HexToAddress("0x9Ac64Cc6e4415144C455BD8E4837Fea55603e5c3")
+	wBnbContractAddress := "0xae13d989daC2f0dEbFf460aC112a837C89BAa7cd"
+
+	transferFnSignature := []byte("swapExactETHForTokensSupportingFeeOnTransferTokens(uint,address[],address,uint)")
+	hash := sha3.NewLegacyKeccak256()
+	hash.Write(transferFnSignature)
+	methodID := hash.Sum(nil)[:4]
+
+	path := GeneratePath(wBnbContractAddress, tokenAddress)
+	pathString := []string{path[0].Hex(), path[1].Hex()}
+
+	deadline := big.NewInt(time.Now().Unix() + 10000)
+	buf := &bytes.Buffer{}
+	gob.NewEncoder(buf).Encode(pathString)
+	bs := buf.Bytes()
+	fmt.Printf("%q", bs)
+
+	paddedAmountOutMin := common.LeftPadBytes(value.Bytes(), 32)
+	paddedPathA := common.LeftPadBytes(path[0].Bytes(), 32)
+	paddedPathB := common.LeftPadBytes(path[1].Bytes(), 32)
+	paddedPath := common.LeftPadBytes(bs, 32)
+	paddedTo := common.LeftPadBytes(toAddress.Bytes(), 32)
+	paddedDeadline := common.LeftPadBytes(deadline.Bytes(), 32)
+
+	fmt.Println("paddedAmountOutMin", paddedAmountOutMin)
+	fmt.Println("paddedPathA", paddedPathA)
+	fmt.Println("paddedPathB", paddedPathB)
+	fmt.Println("paddedPath", paddedPath)
+	fmt.Println("paddedTo", paddedTo)
+	fmt.Println("paddedDeadline", paddedDeadline)
+	fmt.Println("paddedAmountOutMin", paddedAmountOutMin)
+	fmt.Println("paddedAmountOutMin", paddedAmountOutMin)
+
+	txData := BuildTxData(methodID, paddedAmountOutMin, paddedPath, paddedTo, paddedDeadline)
+
+	fmt.Println("txData", txData)
+
+	estimateGas := w.EstimateGas(toAddress.Hex(), txData)
+
+	fmt.Println("estimateGas", estimateGas)
+
+	txId, txNonce, err := w.SignAndSendTransaction(toAddress.Hex(), ToWei(value, 18), txData, w.PendingNonce(), nil, estimateGas)
+	if err != nil {
+		fmt.Println(err)
+	}
+
+	fmt.Println(txId)
+	fmt.Println(txNonce)
 }
 
 func (w *Web3GolangHelper) ListenBridgesEventsV2(contractsAddresses []string, out chan<- []chan types.Log) error {
@@ -678,6 +825,54 @@ func CancelTransaction(client *ethclient.Client, transaction *types.Transaction,
 
 	return signedTx, nil
 }
+
+
+/*
+func (w *Web3GolangHelper) getTokenPairs(token *models.EventsCatched) string {
+	//lpPairs := make([]*models.LpPair, 0)
+
+	lpPairAddress := w.getPair(token.TokenAddress)
+
+	//append(lpPairs, )
+
+	fmt.Println("lpPairAddress", lpPairAddress)
+	return lpPairAddress
+}
+*/
+
+func (w *Web3GolangHelper)  getReserves(tokenAddress string) Reserve {
+
+	pairInstance, instanceErr := pancakePair.NewPancake(common.HexToAddress("0xB7926C0430Afb07AA7DEfDE6DA862aE0Bde767bc"), w.HttpClient())
+	if instanceErr != nil {
+		fmt.Println(instanceErr)
+	}
+
+	reserves, getReservesErr := pairInstance.GetReserves(nil)
+	if getReservesErr != nil {
+		fmt.Println(getReservesErr)
+	}
+
+	return reserves
+}
+
+func (w *Web3GolangHelper) getPair(tokenAddress string) string {
+
+	factoryInstance, instanceErr := pancakeFactory.NewPancake(common.HexToAddress("0xB7926C0430Afb07AA7DEfDE6DA862aE0Bde767bc"), w.HttpClient())
+	if instanceErr != nil {
+		fmt.Println(instanceErr)
+	}
+
+	wBnbContractAddress := "0xae13d989daC2f0dEbFf460aC112a837C89BAa7cd"
+
+	lpPairAddress, getPairErr := factoryInstance.GetPair(nil, common.HexToAddress(wBnbContractAddress), common.HexToAddress(tokenAddress))
+	if getPairErr != nil {
+		fmt.Println(getPairErr)
+	}
+
+	return lpPairAddress.Hex()
+
+}
+
 
 // IsValidAddress validate hex address
 func IsValidAddress(iaddress interface{}) bool {
