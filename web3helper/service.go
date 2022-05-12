@@ -546,7 +546,7 @@ func (w *Web3GolangHelper) SwitchAccount(plainPrivateKey string) {
 	w.FromAddress = &address
 }
 
-func (w *Web3GolangHelper) ConfigureTransactor(value *big.Int, gasPrice *big.Int, gasLimit uint64) {
+func (w *Web3GolangHelper) BuildTransactor(value *big.Int, gasPrice *big.Int, gasLimit uint64) *bind.TransactOpts  {
 	privateKey, privateKeyErr := crypto.HexToECDSA(w.plainPrivateKey)
 	if privateKeyErr != nil {
 		fmt.Println(privateKeyErr)
@@ -566,6 +566,7 @@ func (w *Web3GolangHelper) ConfigureTransactor(value *big.Int, gasPrice *big.Int
 	transactor.GasLimit = gasLimit
 	transactor.Nonce = w.PendingNonce()
 	transactor.Context = context.Background()
+	return transactor
 }
 
 func (w *Web3GolangHelper) Balance(account common.Address) *big.Int {
