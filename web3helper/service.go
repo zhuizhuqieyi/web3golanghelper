@@ -2,22 +2,30 @@ package web3helper
 
 import (
 	"context"
+	"crypto/ecdsa"
 	"encoding/json"
 	"errors"
 	"fmt"
 	"log"
 	"math/big"
 	"net/url"
+	"reflect"
+	"regexp"
 	"strconv"
+	"strings"
 	"time"
-	"github.com/hokaccha/go-prettyjson"
+
 	"github.com/ethereum/go-ethereum"
+	"github.com/ethereum/go-ethereum/accounts/abi/bind"
 	"github.com/ethereum/go-ethereum/common"
+	"github.com/ethereum/go-ethereum/common/hexutil"
 	"github.com/ethereum/go-ethereum/core/types"
 	"github.com/ethereum/go-ethereum/crypto"
 	"github.com/ethereum/go-ethereum/ethclient"
+	"github.com/ethereum/go-ethereum/params"
 	"github.com/fatih/color"
-	web3util "github.com/nikola43/web3golanghelper/web3helper/util"
+	"github.com/hokaccha/go-prettyjson"
+	"github.com/shopspring/decimal"
 	"golang.org/x/crypto/sha3"
 	//web3utils "github.com/nikola43/goweb3manager/goweb3manager/util"
 )
@@ -94,7 +102,7 @@ func NewWeb3GolangHelper(rpcUrl, wsUrl string, plainPrivateKey string) *Web3Gola
 		plainPrivateKey: plainPrivateKey,
 		httpClient:      goWeb3HttpManager,
 		wsClient:        goWeb3WsManager,
-		fromAddress:     web3util.GeneratePublicAddressFromPrivateKey(plainPrivateKey),
+		fromAddress:     GeneratePublicAddressFromPrivateKey(plainPrivateKey),
 	}
 
 	return goWeb3Manager
@@ -177,7 +185,7 @@ func (w *Web3GolangHelper) GetEthBalance(address string) *big.Int {
 
 func (w *Web3GolangHelper) IsAddressContract(address string) bool {
 
-	if !web3util.ValidateAddress(address) {
+	if !ValidateAddress(address) {
 		return false
 	}
 
@@ -196,14 +204,13 @@ func (w *Web3GolangHelper) ChainId() *big.Int {
 	return chainID
 }
 
-func (w *Web3GolangHelper) PendingNonce() uint64 {
-
+func (w *Web3GolangHelper) PendingNonce() *big.Int {
 	nonce, err := w.selectClient().PendingNonceAt(context.Background(), *w.fromAddress)
 	if err != nil {
 		log.Fatal(err)
 	}
-
-	return nonce
+	// calculate next nonce
+	return big.NewInt(int64(nonce))
 }
 func (w *Web3GolangHelper) SignTx(tx *types.Transaction) (*types.Transaction, error) {
 
@@ -313,7 +320,7 @@ func (w *Web3GolangHelper) EstimateGas(to string, txData []byte) uint64 {
 	return estimateGas
 }
 
-func (w *Web3GolangHelper) SendTokens(tokenAddressString, toAddressString string, value *big.Int) (string, uint64, error) {
+func (w *Web3GolangHelper) SendTokens(tokenAddressString, toAddressString string, value *big.Int) (string, *big.Int, error) {
 
 	toAddress := common.HexToAddress(toAddressString)
 
@@ -324,12 +331,12 @@ func (w *Web3GolangHelper) SendTokens(tokenAddressString, toAddressString string
 	paddedAddress := common.LeftPadBytes(toAddress.Bytes(), 32)
 	paddedAmount := common.LeftPadBytes(value.Bytes(), 32)
 
-	txData := web3util.BuildTxData(methodID, paddedAddress, paddedAmount)
+	txData := BuildTxData(methodID, paddedAddress, paddedAmount)
 
 	estimateGas := w.EstimateGas(tokenAddressString, txData)
-	txId, txNonce, err := w.SignAndSendTransaction(toAddressString, web3util.ToWei(value, 18), txData, w.PendingNonce(), nil, estimateGas)
+	txId, txNonce, err := w.SignAndSendTransaction(toAddressString, ToWei(value, 18), txData, w.PendingNonce(), nil, estimateGas)
 	if err != nil {
-		return "", 0, err
+		return "", big.NewInt(0), err
 	}
 
 	return txId, txNonce, nil
@@ -349,17 +356,17 @@ func (w *Web3GolangHelper) selectClient() *ethclient.Client {
 	return selectedClient
 }
 
-func (w *Web3GolangHelper) SendEth(toAddressString string, value string) (string, uint64, error) {
+func (w *Web3GolangHelper) SendEth(toAddressString string, value string) (string, *big.Int, error) {
 
-	txId, nonce, err := w.SignAndSendTransaction(toAddressString, web3util.ToWei(value, 18), make([]byte, 0), w.PendingNonce(), nil, nil)
+	txId, nonce, err := w.SignAndSendTransaction(toAddressString, ToWei(value, 18), make([]byte, 0), w.PendingNonce(), nil, nil)
 	if err != nil {
-		return "", 0, err
+		return "", big.NewInt(0), err
 	}
 
 	return txId, nonce, nil
 }
 
-func (w *Web3GolangHelper) SignAndSendTransaction(toAddressString string, value *big.Int, data []byte, nonce uint64, customGasPrice interface{}, customGasLimit interface{}) (string, uint64, error) {
+func (w *Web3GolangHelper) SignAndSendTransaction(toAddressString string, value *big.Int, data []byte, nonce *big.Int, customGasPrice interface{}, customGasLimit interface{}) (string, *big.Int, error) {
 
 	usedGasPrice, _ := w.selectClient().SuggestGasPrice(context.Background())
 	if logLevel == MediumLogLevel {
@@ -399,7 +406,7 @@ func (w *Web3GolangHelper) SignAndSendTransaction(toAddressString string, value 
 	toAddress := common.HexToAddress(toAddressString)
 
 	tx := types.NewTx(&types.LegacyTx{
-		Nonce:    nonce,
+		Nonce:    nonce.Uint64(),
 		GasPrice: usedGasPrice,
 		Gas:      usedGasLimit,
 		To:       &toAddress,
@@ -409,12 +416,12 @@ func (w *Web3GolangHelper) SignAndSendTransaction(toAddressString string, value 
 
 	singedTx, signTxErr := w.SignTx(tx)
 	if signTxErr != nil {
-		return "", 0, signTxErr
+		return "", big.NewInt(0), signTxErr
 	}
 
 	sendTxErr := w.selectClient().SendTransaction(context.Background(), singedTx)
 	if sendTxErr != nil {
-		return "", 0, sendTxErr
+		return "", big.NewInt(0), sendTxErr
 	}
 
 	if logLevel == HighLogLevel {
@@ -422,7 +429,7 @@ func (w *Web3GolangHelper) SignAndSendTransaction(toAddressString string, value 
 		b, e := singedTx.MarshalJSON()
 		if e != nil {
 			fmt.Println("SendTransaction")
-			return "", 0, e
+			return "", big.NewInt(0), e
 		}
 
 		var result map[string]interface{}
@@ -442,13 +449,13 @@ func (w *Web3GolangHelper) SignAndSendTransaction(toAddressString string, value 
 	return singedTx.Hash().Hex(), nonce, nil
 }
 
-func (w *Web3GolangHelper) CancelTx(to string, nonce uint64, multiplier int64) (string, error) {
+func (w *Web3GolangHelper) CancelTx(to string, nonce *big.Int, multiplier int64) (string, error) {
 
 	gasPrice, _ := w.selectClient().SuggestGasPrice(context.Background())
 
 	txId, _, err := w.SignAndSendTransaction(
 		to,
-		web3util.ToWei(0, 0),
+		ToWei(0, 0),
 		make([]byte, 0),
 		nonce,
 		nil,
@@ -519,92 +526,318 @@ func (w *Web3GolangHelper) ListenBridgesEventsV2(contractsAddresses []string, ou
 	return nil
 }
 
-/*
-func (w *Web3GolangHelper) SendEth(to string, val float64) {
-	fromAddress := crypto.PubkeyToAddress(*w.PublicKeyECDSA)
-	toAddress := common.HexToAddress(to)
-	var data []byte
-	nonce, err := w.Client.PendingNonceAt(context.Background(), fromAddress)
-	if err != nil {
-		log.Fatal(err)
-	}
-
-	gasLimit := uint64(2100000) // in units
-	gasPrice, err := w.Client.SuggestGasPrice(context.Background())
-	if err != nil {
-		log.Fatal(err)
-	}
-
-	ethValue := ethutils.EtherToWei(big.NewFloat(val))
-	tx := types.NewTransaction(nonce, toAddress, ethValue, gasLimit, gasPrice, data)
-
-	chainID, err := w.Client.NetworkID(context.Background())
-	if err != nil {
-		log.Fatal(err)
-	}
-
-	signedTx, err := types.SignTx(tx, types.NewEIP155Signer(chainID), w.PrivateKey)
-	if err != nil {
-		log.Fatal(err)
-	}
-
-	err = w.Client.SendTransaction(context.Background(), signedTx)
-	if err != nil {
-		log.Fatal(err)
-	}
-
-	fmt.Printf("tx sent: %s", signedTx.Hash().Hex())
-}
-*/
 func (w *Web3GolangHelper) SwitchAccount(plainPrivateKey string) {
 	// create privateKey from string key
-	//privateKey, privateKeyErr := crypto.HexToECDSA(plainPrivateKey)
-	//errorsutil.HandleError(privateKeyErr)
+	privateKey, privateKeyErr := crypto.HexToECDSA(plainPrivateKey)
+	if privateKeyErr != nil {
+		fmt.Println(privateKeyErr)
+	}
 
-	/*
-		// generate public key and address from private key
-		publicKey := privateKey.Public()
-		publicKeyECDSA, ok := publicKey.(*ecdsa.PublicKey)
-		if !ok {
-			log.Fatal("error casting public key to ECDSA")
-		}
-	*/
+
+	// generate public key and address from private key
+	publicKey := privateKey.Public()
+	publicKeyECDSA, ok := publicKey.(*ecdsa.PublicKey)
+	if !ok {
+		log.Fatal("error casting public key to ECDSA")
+	}
 
 	// generate address from public key
-	//address := crypto.PubkeyToAddress(*publicKeyECDSA)
-	//w.Address = address
+	address := crypto.PubkeyToAddress(*publicKeyECDSA)
+	w.fromAddress = &address
 }
 
 func (w *Web3GolangHelper) ConfigureTransactor(value *big.Int, gasPrice *big.Int, gasLimit uint64) {
+	privateKey, privateKeyErr := crypto.HexToECDSA(w.plainPrivateKey)
+	if privateKeyErr != nil {
+		fmt.Println(privateKeyErr)
+	}
 
-	/*
-		if value.String() != "-1" {
-			w.Transactor.Value = value
-		}
+	transactor, transactOptsErr := bind.NewKeyedTransactorWithChainID(privateKey, w.ChainId())
 
-		w.Transactor.GasPrice = gasPrice
-		w.Transactor.GasLimit = gasLimit
-		w.Transactor.Nonce = w.PendingNonce()
-		w.Transactor.Context = context.Background()
-	*/
+	if transactOptsErr != nil {
+		fmt.Println(transactOptsErr)
+	}
+
+	if value.String() != "-1" {
+		transactor.Value = value
+	}
+
+	transactor.GasPrice = gasPrice
+	transactor.GasLimit = gasLimit
+	transactor.Nonce = w.PendingNonce()
+	transactor.Context = context.Background()
 }
 
-/*
-func (w *Web3GolangHelper) Balance() *big.Int {
-
+func (w *Web3GolangHelper) Balance(account common.Address) *big.Int {
 	// get current balance
-	balance, balanceErr := w.Client.BalanceAt(context.Background(), w.Address, nil)
-	errorsutil.HandleError(balanceErr)
+	balance, balanceErr := w.httpClient.BalanceAt(context.Background(), account, nil)
+	if balanceErr != nil {
+		fmt.Println(balanceErr)
+	}
+
 	return balance
-
 }
 
-*/
-/*
-func (w *Web3GolangHelper) PendingNonce() *big.Int {
-	// calculate next nonce
-	nonce, nonceErr := w.Client.PendingNonceAt(context.Background(), w.Address)
-	errorsutil.HandleError(nonceErr)
-	return big.NewInt(int64(nonce))
+
+func GweiToEther(wei *big.Int) *big.Float {
+	f := new(big.Float)
+	f.SetPrec(236) //  IEEE 754 octuple-precision binary floating-point format: binary256
+	f.SetMode(big.ToNearestEven)
+	fWei := new(big.Float)
+	fWei.SetPrec(236) //  IEEE 754 octuple-precision binary floating-point format: binary256
+	fWei.SetMode(big.ToNearestEven)
+	return f.Quo(fWei.SetInt(wei), big.NewFloat(params.GWei))
 }
-*/
+
+func GweiToWei(wei *big.Int) *big.Int {
+	eth := GweiToEther(wei)
+	ethWei := EtherToWei(eth)
+	return ethWei
+}
+
+// Wei ->
+func WeiToGwei(wei *big.Int) *big.Int {
+	f := new(big.Float)
+	f.SetPrec(236) //  IEEE 754 octuple-precision binary floating-point format: binary256
+	f.SetMode(big.ToNearestEven)
+	fWei := new(big.Float)
+	fWei.SetPrec(236) //  IEEE 754 octuple-precision binary floating-point format: binary256
+	fWei.SetMode(big.ToNearestEven)
+	v := f.Quo(fWei.SetInt(wei), big.NewFloat(params.GWei))
+	i, _ := new(big.Int).SetString(v.String(), 10)
+
+	return i
+}
+
+func EtherToGwei(eth *big.Float) *big.Int {
+	truncInt, _ := eth.Int(nil)
+	truncInt = new(big.Int).Mul(truncInt, big.NewInt(params.GWei))
+	fracStr := strings.Split(fmt.Sprintf("%.9f", eth), ".")[1]
+	fracStr += strings.Repeat("0", 9-len(fracStr))
+	fracInt, _ := new(big.Int).SetString(fracStr, 10)
+	wei := new(big.Int).Add(truncInt, fracInt)
+	return wei
+}
+
+// CalcGasCost calculate gas cost given gas limit (units) and gas price (wei)
+func CalcGasCost(gasLimit uint64, gasPrice *big.Int) *big.Int {
+	gasLimitBig := big.NewInt(int64(gasLimit))
+	return gasLimitBig.Mul(gasLimitBig, gasPrice)
+}
+
+func GeneratePath(tokenAContractPlainAddress string, tokenBContractPlainAddress string) []common.Address {
+	tokenAContractAddress := common.HexToAddress(tokenAContractPlainAddress)
+	tokenBContractAddress := common.HexToAddress(tokenBContractPlainAddress)
+
+	path := make([]common.Address, 0)
+	path = append(path, tokenAContractAddress)
+	path = append(path, tokenBContractAddress)
+
+	return path
+}
+
+func CancelTransaction(client *ethclient.Client, transaction *types.Transaction, privateKey *ecdsa.PrivateKey) (*types.Transaction, error) {
+	value := big.NewInt(0)
+
+	// generate public key and address from private key
+	publicKey := privateKey.Public()
+	publicKeyECDSA, ok := publicKey.(*ecdsa.PublicKey)
+	if !ok {
+		log.Fatal("error casting public key to ECDSA")
+	}
+
+	// generate address from public key
+	address := crypto.PubkeyToAddress(*publicKeyECDSA)
+
+	var data []byte
+
+	fmt.Println(transaction.GasPrice())
+
+	newGasPrice := big.NewInt(0).Add(transaction.GasPrice(), big.NewInt(0).Div(big.NewInt(0).Mul(transaction.GasPrice(), big.NewInt(10)), big.NewInt(100)))
+	fmt.Println(newGasPrice)
+	tx := types.NewTransaction(transaction.Nonce(), address, value, transaction.Gas(), newGasPrice, data)
+
+	// get chain id
+	chainID, chainIDErr := client.ChainID(context.Background())
+	if chainIDErr != nil {
+		log.Fatal(chainIDErr)
+		return nil, chainIDErr
+	}
+
+	signedTx, err := types.SignTx(tx, types.NewEIP155Signer(chainID), privateKey)
+	if err != nil {
+		log.Fatal(err)
+		return nil, err
+	}
+
+	err = client.SendTransaction(context.Background(), signedTx)
+	if err != nil {
+		log.Fatal(err)
+		return nil, err
+	}
+
+	return signedTx, nil
+}
+
+// IsValidAddress validate hex address
+func IsValidAddress(iaddress interface{}) bool {
+	re := regexp.MustCompile("^0x[0-9a-fA-F]{40}$")
+	switch v := iaddress.(type) {
+	case string:
+		return re.MatchString(v)
+	case common.Address:
+		return re.MatchString(v.Hex())
+	default:
+		return false
+	}
+}
+
+// IsZeroAddress validate if it's a 0 address
+func IsZeroAddress(iaddress interface{}) bool {
+	var address common.Address
+	switch v := iaddress.(type) {
+	case string:
+		address = common.HexToAddress(v)
+	case common.Address:
+		address = v
+	default:
+		return false
+	}
+
+	zeroAddressBytes := common.FromHex("0x0000000000000000000000000000000000000000")
+	addressBytes := address.Bytes()
+	return reflect.DeepEqual(addressBytes, zeroAddressBytes)
+}
+
+// ToDecimal wei to decimals
+func ToDecimal(ivalue interface{}, decimals int) decimal.Decimal {
+	value := new(big.Int)
+	switch v := ivalue.(type) {
+	case string:
+		value.SetString(v, 10)
+	case *big.Int:
+		value = v
+	}
+
+	mul := decimal.NewFromFloat(float64(10)).Pow(decimal.NewFromFloat(float64(decimals)))
+	num, _ := decimal.NewFromString(value.String())
+	result := num.Div(mul)
+
+	return result
+}
+
+// ToWei decimals to wei
+func ToWei(iamount interface{}, decimals int) *big.Int {
+	amount := decimal.NewFromFloat(0)
+	switch v := iamount.(type) {
+	case string:
+		amount, _ = decimal.NewFromString(v)
+	case float64:
+		amount = decimal.NewFromFloat(v)
+	case int64:
+		amount = decimal.NewFromFloat(float64(v))
+	case decimal.Decimal:
+		amount = v
+	case *decimal.Decimal:
+		amount = *v
+	}
+
+	mul := decimal.NewFromFloat(float64(10)).Pow(decimal.NewFromFloat(float64(decimals)))
+	result := amount.Mul(mul)
+
+	wei := new(big.Int)
+	wei.SetString(result.String(), 10)
+
+	return wei
+}
+
+func WeiToEther(wei *big.Int) *big.Float {
+	f := new(big.Float)
+	f.SetPrec(236) //  IEEE 754 octuple-precision binary floating-point format: binary256
+	f.SetMode(big.ToNearestEven)
+	fWei := new(big.Float)
+	fWei.SetPrec(236) //  IEEE 754 octuple-precision binary floating-point format: binary256
+	fWei.SetMode(big.ToNearestEven)
+	return f.Quo(fWei.SetInt(wei), big.NewFloat(params.Ether))
+}
+
+func EtherToWei(eth *big.Float) *big.Int {
+	truncInt, _ := eth.Int(nil)
+	truncInt = new(big.Int).Mul(truncInt, big.NewInt(params.Ether))
+	fracStr := strings.Split(fmt.Sprintf("%.18f", eth), ".")[1]
+	fracStr += strings.Repeat("0", 18-len(fracStr))
+	fracInt, _ := new(big.Int).SetString(fracStr, 10)
+	wei := new(big.Int).Add(truncInt, fracInt)
+	return wei
+}
+
+func GeneratePublicAddressFromPrivateKey(plainPrivateKey string) *common.Address {
+	privateKey, err := crypto.HexToECDSA(plainPrivateKey)
+	if err != nil {
+		log.Fatal(err)
+	}
+
+	publicKey := privateKey.Public()
+	publicKeyECDSA, ok := publicKey.(*ecdsa.PublicKey)
+	if !ok {
+		log.Fatal("error casting public key to ECDSA")
+	}
+
+	fromAddress := crypto.PubkeyToAddress(*publicKeyECDSA)
+	return &fromAddress
+}
+
+func ValidateAddress(address string) bool {
+	re := regexp.MustCompile("^0x[0-9a-fA-F]{40}$")
+	return re.MatchString(address)
+}
+
+// SigRSV signatures R S V returned as arrays
+func SigRSV(isig interface{}) ([32]byte, [32]byte, uint8) {
+	var sig []byte
+	switch v := isig.(type) {
+	case []byte:
+		sig = v
+	case string:
+		sig, _ = hexutil.Decode(v)
+	}
+
+	sigstr := common.Bytes2Hex(sig)
+	rS := sigstr[0:64]
+	sS := sigstr[64:128]
+	R := [32]byte{}
+	S := [32]byte{}
+	copy(R[:], common.FromHex(rS))
+	copy(S[:], common.FromHex(sS))
+	vStr := sigstr[128:130]
+	vI, _ := strconv.Atoi(vStr)
+	V := uint8(vI + 27)
+
+	return R, S, V
+}
+
+func BuildTxData(data ...[]byte) []byte {
+	var txData []byte
+
+	for _, v := range data {
+		txData = append(txData, v...)
+	}
+
+	return txData
+}
+
+func GenerateAddressFromPlainPrivateKey(pk string) (common.Address, *ecdsa.PrivateKey, error) {
+
+	var address common.Address
+	privateKey, err := crypto.HexToECDSA(pk)
+	if err != nil {
+		return address, privateKey, err
+	}
+
+	publicKeyECDSA, ok := privateKey.Public().(*ecdsa.PublicKey)
+	if !ok {
+		return address, privateKey, errors.New("error casting public key to ECDSA")
+	}
+
+	return crypto.PubkeyToAddress(*publicKeyECDSA), privateKey, nil
+}
